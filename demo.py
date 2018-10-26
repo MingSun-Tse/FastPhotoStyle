@@ -19,11 +19,13 @@ parser.add_argument('--save_intermediate', action='store_true', default=False)
 parser.add_argument('--fast', action='store_true', default=False)
 parser.add_argument('--no_post', action='store_true', default=False)
 parser.add_argument('--cuda', type=int, default=1, help='Enable CUDA.')
+parser.add_argument('--mode', type=str, default="")
 args = parser.parse_args()
 
 # Load model
-p_wct = PhotoWCT()
-p_wct.load_state_dict(torch.load(args.model))
+p_wct = PhotoWCT(args)
+if args.mode == "original" or args.mode == "":
+  p_wct.load_state_dict(torch.load(args.model))
 
 if args.fast:
     from photo_gif import GIFSmoothing
@@ -32,7 +34,7 @@ else:
     from photo_smooth import Propagator
     p_pro = Propagator()
 if args.cuda:
-    p_wct.cuda(0)
+    p_wct.cuda(args.cuda)
 
 process_stylization.stylization(
     stylization_module=p_wct,
