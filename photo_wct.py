@@ -8,49 +8,134 @@ from PIL import Image
 import torch
 import torch.nn as nn
 from models import VGGEncoder, VGGDecoder
+# 16x model for NST
+from model import SmallEncoder5_16x_plus, SmallEncoder4_16x_plus, SmallEncoder3_16x_plus, SmallEncoder2_16x_plus, SmallEncoder1_16x_plus
+from model import SmallDecoder5_16x,      SmallDecoder4_16x,      SmallDecoder3_16x,      SmallDecoder2_16x,      SmallDecoder1_16x
+# 16x model for pwct
+from model_pwct import SmallEncoder_16x_plus, SmallDecoder_16x
+
+# ### 16x model
+# e1 = '../KD/Bin/models/small16x_encoder/1SE_16x_QA_E18S1000.pth'
+# e2 = '../KD/Bin/models/small16x_encoder/2SE_16x_QA_E19S6000.pth'
+# e3 = '../KD/Bin/models/small16x_encoder/3SE_16x_QA_E17S9000.pth'
+# e4 = '../KD/Bin/models/small16x_encoder/4SE_16x_QA_E20S0.pth'
+# d1 = '../KD/Experiments/Small16xDecoder_2/e1/weights/1SD_16x_QA_E11S8000.pth'
+# d2 = '../KD/Experiments/Small16xDecoder_2/e2/weights/2SD_16x_QA_E26S2000.pth'
+# d3 = '../KD/Experiments/Small16xDecoder_2/e3/weights/3SD_16x_QA_E25S0.pth'
+# d4 = '../KD/Experiments/Small16xDecoder_2/e4/weights/4SD_16x_QA_E14S5000.pth'
+
+### 16x model trained for pwct
+# e1 = '../KD/Experiments/Small16xEncoder_pwct/e1/weights/12-20181020-1610_1SE_E25S0-2.pth'
+# e2 = '../KD/Experiments/Small16xEncoder_pwct/e2/weights/12-20181020-1602_2SE_E25S0-2.pth'
+# e3 = '../KD/Experiments/Small16xEncoder_pwct/e3/weights/12-20181019-0420_3SE_E25S0-2.pth'
+# e4 = '../KD/Experiments/Small16xEncoder_pwct/e4/weights/12-20181019-0349_4SE_E25S0-2.pth'
+# d1 = '../KD/Experiments/Small16xDecoder_pwct/e1/weights/12-20181021-0913_1SD_E25S0-3.pth'
+# d2 = '../KD/Experiments/Small16xDecoder_pwct/e2/weights/12-20181021-1418_2SD_E25S0-3.pth'
+# d3 = '../KD/Experiments/Small16xDecoder_pwct/e3/weights/12-20181020-1638_3SD_E25S0-3.pth'
+# d4 = '../KD/Experiments/Small16xDecoder_pwct/e4/weights/12-20181020-1637_4SD_E25S0-3.pth'
+
+### 16x model trained for pwct, JointED
+e1 = '../KD/Experiments/Small16xEncoder_pwct/e1_JointED/weights/12-20181026-0259_1SED_E25S0-2.pth'
+d1 = '../KD/Experiments/Small16xEncoder_pwct/e1_JointED/weights/12-20181026-0259_1SED_E25S0-3.pth'
+e2 = '../KD/Experiments/Small16xEncoder_pwct/e2_JointED/weights/12-20181026-0256_2SED_E25S0-2.pth'
+d2 = '../KD/Experiments/Small16xEncoder_pwct/e2_JointED/weights/12-20181026-0256_2SED_E25S0-3.pth'
+e3 = '../KD/Experiments/Small16xEncoder_pwct/e3_JointED/weights/12-20181026-0255_3SED_E25S0-2.pth'
+d3 = '../KD/Experiments/Small16xEncoder_pwct/e3_JointED/weights/12-20181026-0255_3SED_E25S0-3.pth'
+e4 = '../KD/Experiments/Small16xEncoder_pwct/e4_JointED/weights/12-20181026-0255_4SED_E25S0-2.pth'
+d4 = '../KD/Experiments/Small16xEncoder_pwct/e4_JointED/weights/12-20181026-0255_4SED_E25S0-3.pth'
 
 
 class PhotoWCT(nn.Module):
-    def __init__(self):
+    def __init__(self, args):
         super(PhotoWCT, self).__init__()
-        self.e1 = VGGEncoder(1)
-        self.d1 = VGGDecoder(1)
-        self.e2 = VGGEncoder(2)
-        self.d2 = VGGDecoder(2)
-        self.e3 = VGGEncoder(3)
-        self.d3 = VGGDecoder(3)
-        self.e4 = VGGEncoder(4)
-        self.d4 = VGGDecoder(4)
+        self.args = args
+        if not self.args.mode:
+          #### original model
+          self.e1 = VGGEncoder(1)
+          self.d1 = VGGDecoder(1)
+          self.e2 = VGGEncoder(2)
+          self.d2 = VGGDecoder(2)
+          self.e3 = VGGEncoder(3)
+          self.d3 = VGGDecoder(3)
+          self.e4 = VGGEncoder(4)
+          self.d4 = VGGDecoder(4)
+        elif "16x" in self.args.mode:
+          self.e1 = SmallEncoder_16x_plus(1, e1); self.d1 = SmallDecoder_16x(1, d1)
+          self.e2 = SmallEncoder_16x_plus(2, e2); self.d2 = SmallDecoder_16x(2, d2)
+          self.e3 = SmallEncoder_16x_plus(3, e3); self.d3 = SmallDecoder_16x(3, d3)
+          self.e4 = SmallEncoder_16x_plus(4, e4); self.d4 = SmallDecoder_16x(4, d4)
+        else:
+          print("wrong mode")
+          exit(1)
     
+    @torch.no_grad()
     def transform(self, cont_img, styl_img, cont_seg, styl_seg):
         self.__compute_label_info(cont_seg, styl_seg)
+        if not self.args.mode:
+          #### original model
+          sF4, sF3, sF2, sF1 = self.e4.forward_multiple(styl_img)
+          cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4(cont_img)
+          sF4 = sF4.data.squeeze(0)
+          cF4 = cF4.data.squeeze(0)
+          csF4 = self.__feature_wct(cF4, sF4, cont_seg, styl_seg)
+          Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
+          cF3, cpool_idx, cpool1, cpool_idx2, cpool2 = self.e3(Im4)
+          sF3 = sF3.data.squeeze(0) 
+          cF3 = cF3.data.squeeze(0)
+          csF3 = self.__feature_wct(cF3, sF3, cont_seg, styl_seg)
+          Im3 = self.d3(csF3, cpool_idx, cpool1, cpool_idx2, cpool2)
+          cF2, cpool_idx, cpool = self.e2(Im3)
+          sF2 = sF2.data.squeeze(0)
+          cF2 = cF2.data.squeeze(0)
+          csF2 = self.__feature_wct(cF2, sF2, cont_seg, styl_seg)
+          Im2 = self.d2(csF2, cpool_idx, cpool)
+          cF1 = self.e1(Im2)
+          sF1 = sF1.data.squeeze(0)
+          cF1 = cF1.data.squeeze(0)
+          csF1 = self.__feature_wct(cF1, sF1, cont_seg, styl_seg)
+          Im1 = self.d1(csF1)
+        else: 
+          #### slimmed model
+          sF4 = self.e4(styl_img)
+          torch.cuda.empty_cache()
+          cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4.forward_stem(cont_img)[3:] if "pwct" in self.args.mode else self.e4.forward_pwct(cont_img)
+          torch.cuda.empty_cache()
+          sF4 = sF4.data.squeeze(0)
+          cF4 = cF4.data.squeeze(0)
+          csF4 = self.__feature_wct(cF4, sF4, cont_seg, styl_seg);
 
-        sF4, sF3, sF2, sF1 = self.e4.forward_multiple(styl_img)
-
-        cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = self.e4(cont_img)
-        sF4 = sF4.data.squeeze(0)
-        cF4 = cF4.data.squeeze(0)
-        # print(cont_seg)
-        csF4 = self.__feature_wct(cF4, sF4, cont_seg, styl_seg)
-        Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
-
-        cF3, cpool_idx, cpool1, cpool_idx2, cpool2 = self.e3(Im4)
-        sF3 = sF3.data.squeeze(0)
-        cF3 = cF3.data.squeeze(0)
-        csF3 = self.__feature_wct(cF3, sF3, cont_seg, styl_seg)
-        Im3 = self.d3(csF3, cpool_idx, cpool1, cpool_idx2, cpool2)
-
-        cF2, cpool_idx, cpool = self.e2(Im3)
-        sF2 = sF2.data.squeeze(0)
-        cF2 = cF2.data.squeeze(0)
-        csF2 = self.__feature_wct(cF2, sF2, cont_seg, styl_seg)
-        Im2 = self.d2(csF2, cpool_idx, cpool)
-
-        cF1 = self.e1(Im2)
-        sF1 = sF1.data.squeeze(0)
-        cF1 = cF1.data.squeeze(0)
-        csF1 = self.__feature_wct(cF1, sF1, cont_seg, styl_seg)
-        Im1 = self.d1(csF1)
+          Im4 = self.d4(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) if "pwct" in self.args.mode else self.d4.forward_pwct(csF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # changed
+          torch.cuda.empty_cache()
+          
+          sF3 = self.e3(styl_img)
+          torch.cuda.empty_cache()
+          cF3, cpool_idx, cpool1, cpool_idx2, cpool2 = self.e3.forward_stem(cont_img)[2:] if "pwct" in self.args.mode else self.e3.forward_pwct(Im4)
+          torch.cuda.empty_cache()
+          sF3 = sF3.data.squeeze(0) 
+          cF3 = cF3.data.squeeze(0)
+          csF3 = self.__feature_wct(cF3, sF3, cont_seg, styl_seg)
+          Im3 = self.d3(csF3, cpool_idx, cpool1, cpool_idx2, cpool2) if "pwct" in self.args.mode else self.d3.forward_pwct(csF3, cpool_idx, cpool1, cpool_idx2, cpool2) # changed
+          torch.cuda.empty_cache()
+          
+          sF2 = self.e2(styl_img)
+          torch.cuda.empty_cache()
+          cF2, cpool_idx, cpool = self.e2.forward_stem(Im3)[1:] if "pwct" in self.args.mode else self.e2.forward_pwct(Im3) # changed
+          torch.cuda.empty_cache()
+          sF2 = sF2.data.squeeze(0)
+          cF2 = cF2.data.squeeze(0)
+          csF2 = self.__feature_wct(cF2, sF2, cont_seg, styl_seg)
+          Im2 = self.d2(csF2, cpool_idx, cpool) if "pwct" in self.args.mode else self.d2.forward_pwct(csF2, cpool_idx, cpool) # changed
+          torch.cuda.empty_cache()
+          
+          sF1 = self.e1(styl_img)
+          torch.cuda.empty_cache()
+          cF1 = self.e1(Im2)
+          torch.cuda.empty_cache()
+          sF1 = sF1.data.squeeze(0)
+          cF1 = cF1.data.squeeze(0)
+          csF1 = self.__feature_wct(cF1, sF1, cont_seg, styl_seg)
+          Im1 = self.d1(csF1) if "pwct" in self.args.mode else self.d1.forward_pwct(csF1)
+          torch.cuda.empty_cache()
         return Im1
 
     def __compute_label_info(self, cont_seg, styl_seg):
